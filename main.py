@@ -1,10 +1,9 @@
-import imaplib
+# import imaplib
 import re
-import smtplib
-import email
-from email.header import decode_header
-from email.mime.multipart import MIMEMultipart
-from openai import OpenAI
+# import smtplib
+# import email
+# from email.header import decode_header
+# from email.mime.multipart import MIMEMultipart
 import configparser
 import logging
 from logging.handlers import RotatingFileHandler
@@ -33,12 +32,13 @@ def load_configuration(config_file='configuration.ini'):
     return config
 
 
-def check_for_spam(email_content):
+def is_spam(email_content):
     """
-    Uses OpenAI's GPT-4 to determine if the provided email content is spam.
+    Use LLM to determine if the provided email content is spam.
     Returns True if spam, False otherwise.
     """
     try:
+        # TODO: This prompt is going to be replaced by promps tailored for LLMs
         messages = [
             {"role": "system",
              "content": "You are a highly intelligent email filter. You check if an email is fraudulent"},
@@ -70,36 +70,43 @@ def check_for_spam(email_content):
             {"role": "system", "content": "You will not output anything but this number."},
             {"role": "user", "content": email_content}
         ]
-        model = "gpt-4-1106-preview"
+        model = "gpt-4-1106-preview" # TODO: The model will be set in the config
 
-        response = client.chat.completions.create(
-            model=model,
-            messages=messages
-        )
+        # TODO: Provide model with setup and email
+        response = None
 
         # Analyze response to determine if it's spam
         answer = response.choices[0].message.content
-        match = re.search(r'\b(\d{1,3})\b', answer)
-        if match:
-            spam_score = int(match.group(1))
-            logger.info(f"Spam score: {spam_score} for {email_content}")
-
-            # Decide if it's spam based on the score
-            is_spam = spam_score > 50  # Example threshold, can be adjusted
-            return is_spam
-        else:
+        # TODO: Experiments with CoT might make score extraction harder
+        match = re.search(r'\b(100|[0-9][0-9]?)\b', answer)
+        
+        if not match:
             logger.warning("No spam score found in the model's response.")
             return False
+        
+        spam_score = int(match.group(1))
+        logger.info(f"Spam score: {spam_score} for {email_content}")
+
+        # Decide if it's spam based on the score
+        # TODO: Insert threashold into config
+        is_spam = spam_score > 50 
+        return is_spam
+
     except Exception as e:
         logger.error(f"Error in check_for_spam: {e}")
         return False
 
 
-def download_emails(imap_server, email_account, email_password):
-    """
-    Connects to the IMAP server and downloads unread emails, marking them as read.
-    Returns a list of tuples, each containing an email.message.EmailMessage object and its decoded body.
-    """
+def get_emails(imap_server, email_account, email_password):
+    '''
+    Obtains relevant content from benchmark emails
+    '''
+    #"""
+    #Connects to the IMAP server and downloads unread emails, marking them as read.
+    #Returns a list of tuples, each containing an email.message.EmailMessage object and its decoded body.
+    #"""
+    # TODO: Temporarily replace with email aquisition from text files
+    return
     try:
         mail = imaplib.IMAP4_SSL(imap_server)
         mail.login(email_account, email_password)
@@ -154,7 +161,7 @@ def forward_email(smtp_server, email_account, email_password, original_email):
     """
     Forwards an email to a specified recipient using SMTP, keeping the original structure and signature.
     """
-    #TODO
+    # TODO (later on): Fuck! It even is a todo in the original project...
     return
     try:
         # Recipient address
@@ -189,30 +196,32 @@ def forward_email(smtp_server, email_account, email_password, original_email):
 
 
 config = load_configuration()
-client = OpenAI(api_key=config['DEFAULT']['openai_api_key'])
 logger = setup_logging()
 
 
 def main():
-    """
-    Main function to orchestrate the downloading, spam checking, and forwarding of emails.
-    """
+    '''
+    Main function to start benchmarking process
+    '''
+    #"""
+    #Main function to orchestrate the downloading, spam checking, and forwarding of emails.
+    #"""
     try:
         logger.info("Starting email processing")
 
-        # Download emails
-        emails = download_emails(config['DEFAULT']['imap_server'],
-                                 config['DEFAULT']['email_account'],
-                                 config['DEFAULT']['email_password'])
+        # Aquire emails
+        emails = get_emails(config['DEFAULT']['imap_server'],
+            config['DEFAULT']['email_account'],
+            config['DEFAULT']['email_password'])
 
         for email_msg, email_body in emails:
             # Check for spam
-            if not check_for_spam(str(email_msg) + email_body):
-                # Forward non-spam emails
+            if not is_spam(str(email_msg) + email_body):
+                # Forward non-spam emails (Currently inactive)
                 forward_email(config['DEFAULT']['smtp_server'],
-                              config['DEFAULT']['email_account'],
-                              config['DEFAULT']['email_password'],
-                              email_msg)
+                    config['DEFAULT']['email_account'],
+                    config['DEFAULT']['email_password'],
+                    email_msg)
 
         logger.info("Email processing completed successfully")
     except Exception as e:
